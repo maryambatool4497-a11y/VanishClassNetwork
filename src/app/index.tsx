@@ -26,7 +26,7 @@ type Message = {
 
 const STORAGE_KEY = "vanish_messages";
 const RELAY_URL = "wss://vanish-relay-sawaira.bonto.page/ws";
-const DISPLAY_NAME = "Maryam";
+const NAME_STORAGE_KEY = "vanish_display_name";
 const DEVICE_ID_KEY = "vanish_device_id";
 const PROTOCOL_VERSION = 1;
 
@@ -38,6 +38,12 @@ export default function HomeScreen() {
   const [reconnectKey, setReconnectKey] = useState(0);
   const [connectedMembers, setConnectedMembers] = useState<string[]>([]);
   const [memberCount, setMemberCount] = useState(0);
+
+  const [displayName, setDisplayName] = useState("");
+  const [nameInput, setNameInput] = useState("");
+  const [hasJoined, setHasJoined] = useState(false);
+  const [isNameLoaded, setIsNameLoaded] = useState(false);
+  const [nameError, setNameError] = useState("");
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -55,6 +61,58 @@ export default function HomeScreen() {
   const [now, setNow] = useState(Date.now());
   const [isLoaded, setIsLoaded] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
+
+  // Load the saved display name
+  useEffect(() => {
+    const loadSavedName = async () => {
+      try {
+        const savedName = await AsyncStorage.getItem(NAME_STORAGE_KEY);
+
+        if (
+          savedName &&
+          savedName.trim().length > 0 &&
+          savedName.trim().length <= 30
+        ) {
+          setDisplayName(savedName.trim());
+          setNameInput(savedName.trim());
+          setHasJoined(true);
+        }
+      } catch (error) {
+        console.log("Error loading display name:", error);
+      } finally {
+        setIsNameLoaded(true);
+      }
+    };
+
+    loadSavedName();
+  }, []);
+
+  // Join chat and permanently save the display name
+  const joinChat = async () => {
+    const cleanName = nameInput.trim();
+
+    if (cleanName.length === 0) {
+      setNameError("Please enter your name.");
+      return;
+    }
+
+    if (cleanName.length > 30) {
+      setNameError("Name cannot exceed 30 characters.");
+      return;
+    }
+
+    try {
+      await AsyncStorage.setItem(NAME_STORAGE_KEY, cleanName);
+
+      setDisplayName(cleanName);
+      setNameInput(cleanName);
+      setNameError("");
+      setHasJoined(true);
+    } catch (error) {
+      console.log("Error saving display name:", error);
+      setNameError("Could not save your name. Please try again.");
+    }
+  };
 
   // Load or create a permanent device ID
   useEffect(() => {
@@ -79,9 +137,9 @@ export default function HomeScreen() {
     loadDeviceId();
   }, []);
 
-  // Connect to the class relay
+  // Connect to the class relay only after the user has joined
   useEffect(() => {
-    if (!deviceId) return;
+    if (!deviceId || !isNameLoaded || !hasJoined || !displayName) return;
 
     if (!isOnline) {
       setConnectedMembers([]);
@@ -106,7 +164,7 @@ export default function HomeScreen() {
           type: "join",
           protocol: PROTOCOL_VERSION,
           device_id: deviceId,
-          name: DISPLAY_NAME,
+          name: displayName,
         }),
       );
 
@@ -183,7 +241,7 @@ export default function HomeScreen() {
             createdAt: localSentTime,
             expiresAt: localExpiry,
             status: "sent",
-            isMine: data.sender === DISPLAY_NAME,
+            isMine: data.sender === displayName,
           };
 
           setMessages((previousMessages) => {
@@ -271,7 +329,7 @@ export default function HomeScreen() {
 
       socket.close();
     };
-  }, [deviceId, isOnline, reconnectKey]);
+  }, [deviceId, isNameLoaded, hasJoined, displayName, isOnline, reconnectKey]);
 
   // Monitor internet connectivity
   useEffect(() => {
@@ -363,7 +421,15 @@ export default function HomeScreen() {
 
   // Send queued messages when connected
   useEffect(() => {
-    if (!isLoaded || !isOnline || relayStatus !== "Connected") return;
+    if (
+      !hasJoined ||
+      !displayName ||
+      !isLoaded ||
+      !isOnline ||
+      relayStatus !== "Connected"
+    ) {
+      return;
+    }
 
     const socket = socketRef.current;
 
@@ -396,7 +462,7 @@ export default function HomeScreen() {
           JSON.stringify({
             type: "message",
             id: message.id,
-            sender: DISPLAY_NAME,
+            sender: displayName,
             text: message.text,
           }),
         );
@@ -411,7 +477,7 @@ export default function HomeScreen() {
         console.log("Message sending failed:", error);
       }
     });
-  }, [messageQueue, isLoaded, isOnline, relayStatus]);
+  }, [messageQueue, isLoaded, isOnline, relayStatus, hasJoined, displayName]);
 
   // Send message
   const sendMessage = () => {
@@ -432,7 +498,7 @@ export default function HomeScreen() {
       createdAt: currentTime,
       expiresAt: currentTime + 30000,
       status: "waiting",
-      sender: DISPLAY_NAME,
+      sender: displayName,
       isMine: true,
     };
 
@@ -451,170 +517,249 @@ export default function HomeScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
+      keyboardVerticalOffset={0}
     >
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logo}>✿</Text>
+      {!isNameLoaded ? (
+        <View style={styles.joinScreen}>
+          <View style={styles.joinLogoCircle}>
+            <Text style={styles.joinLogo}>✿</Text>
+          </View>
+          <Text style={styles.joinBrand}>Vanish Class</Text>
+          <Text style={styles.joinSubtitle}>Loading your chat...</Text>
+        </View>
+      ) : !hasJoined ? (
+        <View style={styles.joinScreen}>
+          <View style={styles.joinLogoCircle}>
+            <Text style={styles.joinLogo}>✿</Text>
           </View>
 
-          <View style={styles.titleArea}>
-            <Text style={styles.headerTitle}>Vanish Class</Text>
-            <Text style={styles.headerSubtitle}>
-              little chats, lasting moments ♡
+          <Text style={styles.joinBrand}>Vanish Class</Text>
+          <Text style={styles.joinSubtitle}>
+            little chats, lasting moments ♡
+          </Text>
+
+          <View style={styles.welcomeCard}>
+            <Text style={styles.welcomeTitle}>Welcome!</Text>
+
+            <Text style={styles.welcomeDescription}>
+              Join your class chat and share little conversations with your
+              classmates.
             </Text>
-          </View>
 
-          <View style={styles.statusBadge}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isOnline ? "#168F83" : "#D97777" },
-              ]}
+            <Text style={styles.nameLabel}>YOUR DISPLAY NAME</Text>
+
+            <TextInput
+              style={styles.nameInput}
+              placeholder="Enter your name..."
+              placeholderTextColor="#8CA6A2"
+              value={nameInput}
+              onChangeText={(value) => {
+                setNameInput(value);
+                setNameError("");
+              }}
+              maxLength={30}
+              autoCapitalize="words"
+              returnKeyType="done"
+              onSubmitEditing={joinChat}
             />
-            <Text style={styles.statusText}>
-              {isOnline ? "ONLINE" : "OFFLINE"}
-            </Text>
-          </View>
-        </View>
 
-        <View style={styles.notice}>
-          <Text style={styles.noticeText}>
-            ✨ Every message has a 30-second lifetime
-          </Text>
-          <Text style={styles.relayText}>Relay: {relayStatus}</Text>
-        </View>
+            {nameError !== "" && (
+              <Text style={styles.nameError}>{nameError}</Text>
+            )}
 
-        <View style={styles.presenceContainer}>
-          <View style={styles.presenceTop}>
-            <Text style={styles.presenceTitle}>Connected members</Text>
-            <View style={styles.memberCountBadge}>
-              <Text style={styles.memberCountText}>{memberCount}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.presenceNames}>
-            {connectedMembers.length > 0
-              ? connectedMembers.join("  •  ")
-              : "No members connected"}
-          </Text>
-        </View>
-      </View>
-
-      {/* Chat area */}
-      <FlatList
-        style={styles.chatArea}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messageList}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <Text style={styles.emptyIcon}>💬</Text>
-            </View>
-
-            <Text style={styles.emptyTitle}>Your chat starts here</Text>
-            <Text style={styles.emptySubtitle}>
-              Send a message and start a conversation{"\n"}
-              with your classmates.
-            </Text>
-            <Text style={styles.emptyDecoration}>─── ♡ ───</Text>
-          </View>
-        }
-        renderItem={({ item }) => {
-          const secondsLeft = Math.max(
-            0,
-            Math.ceil((item.expiresAt - now) / 1000),
-          );
-
-          const messageTime = new Date(item.createdAt).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-
-          const isMine = item.isMine !== false;
-
-          return (
-            <View
+            <TouchableOpacity
               style={[
-                styles.messageWrapper,
-                !isMine && styles.receivedMessageWrapper,
+                styles.joinButton,
+                nameInput.trim() === "" && styles.disabledJoinButton,
               ]}
+              onPress={joinChat}
+              disabled={nameInput.trim() === ""}
+              activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.senderLabel,
-                  !isMine && styles.receivedSenderLabel,
-                ]}
-              >
-                {isMine ? "YOU" : item.sender || "CLASSMATE"}
-              </Text>
+              <Text style={styles.joinButtonText}>Join Chat</Text>
+            </TouchableOpacity>
 
-              <View
-                style={[
-                  styles.messageBubble,
-                  !isMine && styles.receivedMessageBubble,
-                ]}
-              >
-                <Text style={styles.messageText}>{item.text}</Text>
-                <Text style={styles.messageStatus}>
-                  {getMessageStatus(item)}
+            <Text style={styles.joinNote}>
+              ✨ Every message disappears after 30 seconds
+            </Text>
+          </View>
+
+          <Text style={styles.joinFooter}>
+            Vanish Class • made for your classroom ♡
+          </Text>
+        </View>
+      ) : (
+        <>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerTop}>
+              <View style={styles.logoCircle}>
+                <Text style={styles.logo}>✿</Text>
+              </View>
+
+              <View style={styles.titleArea}>
+                <Text style={styles.headerTitle}>Vanish Class</Text>
+                <Text style={styles.headerSubtitle}>
+                  little chats, lasting moments ♡
                 </Text>
+              </View>
 
-                <View style={styles.messageFooter}>
-                  <Text style={styles.timeText}>{messageTime}</Text>
-                  <View style={styles.expiryBadge}>
-                    <Text style={styles.expiryText}>◷ {secondsLeft}s</Text>
-                  </View>
-                </View>
+              <View style={styles.statusBadge}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: isOnline ? "#168F83" : "#D97777" },
+                  ]}
+                />
+                <Text style={styles.statusText}>
+                  {isOnline ? "ONLINE" : "OFFLINE"}
+                </Text>
               </View>
             </View>
-          );
-        }}
-      />
 
-      {/* Message input */}
-      <View style={styles.inputSection}>
-        <Text style={styles.inputHint}>SEND A MESSAGE</Text>
+            <View style={styles.notice}>
+              <Text style={styles.noticeText}>
+                ✨ Every message has a 30-second lifetime
+              </Text>
+              <Text style={styles.relayText}>Relay: {relayStatus}</Text>
+            </View>
 
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Write your message..."
-            placeholderTextColor="#8CA6A2"
-            value={input}
-            onChangeText={setInput}
-            multiline
-            maxLength={500}
-            textAlignVertical="center"
-            blurOnSubmit={false}
-            returnKeyType="default"
+            <View style={styles.presenceContainer}>
+              <View style={styles.presenceTop}>
+                <Text style={styles.presenceTitle}>Connected members</Text>
+                <View style={styles.memberCountBadge}>
+                  <Text style={styles.memberCountText}>{memberCount}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.presenceNames}>
+                {connectedMembers.length > 0
+                  ? connectedMembers.join("  •  ")
+                  : "No members connected"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Chat area */}
+          <FlatList
+            style={styles.chatArea}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.messageList}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={
+              Platform.OS === "ios" ? "interactive" : "on-drag"
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconCircle}>
+                  <Text style={styles.emptyIcon}>💬</Text>
+                </View>
+
+                <Text style={styles.emptyTitle}>Your chat starts here</Text>
+                <Text style={styles.emptySubtitle}>
+                  Send a message and start a conversation{"\n"}
+                  with your classmates.
+                </Text>
+                <Text style={styles.emptyDecoration}>─── ♡ ───</Text>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const secondsLeft = Math.max(
+                0,
+                Math.ceil((item.expiresAt - now) / 1000),
+              );
+
+              const messageTime = new Date(item.createdAt).toLocaleTimeString(
+                [],
+                {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                },
+              );
+
+              const isMine = item.isMine !== false;
+
+              return (
+                <View
+                  style={[
+                    styles.messageWrapper,
+                    !isMine && styles.receivedMessageWrapper,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.senderLabel,
+                      !isMine && styles.receivedSenderLabel,
+                    ]}
+                  >
+                    {isMine ? "YOU" : item.sender || "CLASSMATE"}
+                  </Text>
+
+                  <View
+                    style={[
+                      styles.messageBubble,
+                      !isMine && styles.receivedMessageBubble,
+                    ]}
+                  >
+                    <Text style={styles.messageText}>{item.text}</Text>
+                    <Text style={styles.messageStatus}>
+                      {getMessageStatus(item)}
+                    </Text>
+
+                    <View style={styles.messageFooter}>
+                      <Text style={styles.timeText}>{messageTime}</Text>
+                      <View style={styles.expiryBadge}>
+                        <Text style={styles.expiryText}>◷ {secondsLeft}s</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              );
+            }}
           />
 
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              input.trim() !== "" && styles.activeSendButton,
-            ]}
-            onPress={sendMessage}
-            activeOpacity={0.8}
-            disabled={input.trim() === ""}
-          >
-            <Text style={styles.sendIcon}>➤</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Message input */}
+          <View style={styles.inputSection}>
+            <Text style={styles.inputHint}>SEND A MESSAGE</Text>
 
-        <Text style={styles.bottomText}>
-          Vanish Class • little conversations, short-lived messages
-        </Text>
-      </View>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Write your message..."
+                placeholderTextColor="#8CA6A2"
+                value={input}
+                onChangeText={setInput}
+                multiline
+                maxLength={500}
+                textAlignVertical="center"
+                blurOnSubmit={false}
+                returnKeyType="default"
+              />
+
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  input.trim() !== "" && styles.activeSendButton,
+                ]}
+                onPress={sendMessage}
+                activeOpacity={0.8}
+                disabled={input.trim() === ""}
+              >
+                <Text style={styles.sendIcon}>➤</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.bottomText}>
+              Vanish Class • little conversations, short-lived messages
+            </Text>
+          </View>
+        </>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -625,6 +770,127 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5FAF9",
   },
 
+  // Join screen
+  joinScreen: {
+    flex: 1,
+    backgroundColor: "#F5FAF9",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 25,
+  },
+
+  joinLogoCircle: {
+    height: 85,
+    width: 85,
+    borderRadius: 28,
+    backgroundColor: "#DDF3EF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+
+  joinLogo: {
+    fontSize: 48,
+    color: "#168F83",
+  },
+
+  joinBrand: {
+    fontSize: 29,
+    fontWeight: "bold",
+    color: "#174F49",
+  },
+
+  joinSubtitle: {
+    fontSize: 13,
+    color: "#72968F",
+    marginTop: 7,
+  },
+
+  welcomeCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 25,
+    padding: 23,
+    marginTop: 38,
+    borderWidth: 1,
+    borderColor: "#DCEDE9",
+    elevation: 3,
+    shadowColor: "#568B81",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+
+  welcomeTitle: {
+    fontSize: 23,
+    fontWeight: "bold",
+    color: "#245F57",
+  },
+
+  welcomeDescription: {
+    fontSize: 13,
+    lineHeight: 21,
+    color: "#789A94",
+    marginTop: 9,
+    marginBottom: 25,
+  },
+
+  nameLabel: {
+    fontSize: 10,
+    fontWeight: "bold",
+    letterSpacing: 1,
+    color: "#568B81",
+    marginBottom: 9,
+  },
+
+  nameInput: {
+    backgroundColor: "#F3F9F7",
+    borderWidth: 1,
+    borderColor: "#D9EAE6",
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+    fontSize: 14,
+    color: "#285B54",
+  },
+
+  nameError: {
+    color: "#C45F5F",
+    fontSize: 12,
+    marginTop: 8,
+  },
+
+  joinButton: {
+    backgroundColor: "#168F83",
+    borderRadius: 15,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 18,
+  },
+
+  disabledJoinButton: {
+    backgroundColor: "#B9DCD5",
+  },
+
+  joinButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "bold",
+  },
+
+  joinNote: {
+    textAlign: "center",
+    color: "#83A69F",
+    fontSize: 11,
+    marginTop: 20,
+  },
+
+  joinFooter: {
+    color: "#91AAA5",
+    fontSize: 11,
+    marginTop: 35,
+  },
+
+  // Chat header
   header: {
     backgroundColor: "#DDF3EF",
     paddingTop: Platform.OS === "android" ? 42 : 55,
@@ -755,6 +1021,7 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
 
+  // Chat messages
   chatArea: {
     flex: 1,
   },
@@ -889,6 +1156,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
+  // Message input
   inputSection: {
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 17,
