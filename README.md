@@ -1,56 +1,170 @@
-# Welcome to your Expo app 👋
+# Vanish Class Network
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**A real-time messaging application with automatically disappearing messages.**
 
-## Get started
+Vanish Class Network is a React Native mobile application developed using Expo and TypeScript. It allows connected users to exchange messages through a WebSocket relay. Messages automatically expire after 30 seconds.
 
-1. Install dependencies
+## 1. Project Overview
 
-   ```bash
-   npm install
-   ```
+The application provides a temporary messaging environment for classroom communication.
 
-2. Start the app
+### Main Features
 
-   ```bash
-   npx expo start
-   ```
+- **Real-Time Messaging:** Send and receive messages through a WebSocket connection.
+- **30-Second Message Expiry:** Messages automatically expire after their original 30-second lifetime.
+- **Message Status:** Supports message lifecycle states such as created, waiting, sent, delivered, displayed, expired, and dropped.
+- **Offline Message Queue:** Temporarily queues messages while offline and sends them only if their original expiry deadline has not passed.
+- **Presence System:** Displays the number and names of currently connected members.
+- **Automatic Reconnection:** Attempts to reconnect when the connection is interrupted.
+- **Duplicate Prevention:** Tracks message IDs to prevent duplicate processing.
+- **Persistent Display Name:** Saves the user's chosen display name.
+- **Teal-Themed Interface:** Includes a branded splash screen, Join Screen, and chat interface.
 
-In the output, you'll find options to open the app in a
+## 2. Technologies Used
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+| Technology              | Purpose                             |
+| ----------------------- | ----------------------------------- |
+| React Native            | Mobile application development      |
+| Expo                    | Development and Android builds      |
+| TypeScript              | Application programming             |
+| WebSocket               | Real-time communication             |
+| AsyncStorage            | Local data persistence              |
+| React Native Reanimated | Splash screen animation             |
+| Git and GitHub          | Version control and project hosting |
+| EAS Build               | Android APK generation              |
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 3. Relay Server
 
-## Get a fresh project
+The application communicates with the class-approved WebSocket relay.
 
-When you're ready, run:
+**Relay Address:**
+
+`wss://vanish-relay-sawaira.bonto.page/ws`
+
+**Protocol Version:** 1
+
+The relay handles message distribution, delivery notifications, expiration, and connected-member presence.
+
+The application follows the class-approved communication protocol.
+
+## 4. Installation and Setup
+
+### Requirements
+
+- Node.js and npm
+- Android phone or emulator
+- Expo development environment
+
+### Step 1: Clone the Repository
 
 ```bash
-npm run reset-project
+git clone https://github.com/maryambatool4497-a11y/VanishClassNetwork.git
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+### Step 2: Open the Project
 
-### Other setup steps
+```bash
+cd VanishClassNetwork
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### Step 3: Install Dependencies
 
-## Learn more
+```bash
+npm install
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+### Step 4: Start the Application
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npx expo start
+```
 
-## Join the community
+Scan the QR code using Expo Go if the project configuration and installed dependencies support it.
 
-Join our community of developers creating universal apps.
+## 5. TypeScript Check
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+To check the project for TypeScript errors, run:
+
+```bash
+npx tsc --noEmit
+```
+
+## 6. Android APK Build
+
+The Android application can be built using Expo Application Services (EAS).
+
+```bash
+npx eas-cli build --platform android --profile preview
+```
+
+After the build completes, download the generated APK from the Expo build page and install it on an Android device.
+
+## 7. Message Expiration and Offline Handling
+
+Each message has an original 30-second expiration deadline.
+
+- Messages are removed after expiration.
+- The application uses relay server time information to calculate the remaining lifetime.
+- Messages queued while offline are sent only if they remain within their original expiration deadline.
+- Messages that expire before reconnection are dropped instead of being sent late.
+
+## 8. Project Structure
+
+```text
+VanishClassNetwork/
+│
+├── src/
+│   ├── app/
+│   │   ├── _layout.tsx
+│   │   └── index.tsx
+│   │
+│   └── components/
+│       ├── animated-icon.tsx
+│       └── app-tabs.tsx
+│
+├── assets/
+├── constants/
+├── package.json
+├── app.json
+├── eas.json
+└── README.md
+```
+
+_Note: Other project files and folders may also be present._
+
+## 9. Testing
+
+The application was tested on Android devices.
+
+Testing includes:
+
+- Application launch and splash screen.
+- User joining with a display name.
+- Real-time message sending and receiving.
+- Connected-member presence.
+- Automatic message expiration.
+- Offline message handling and reconnection.
+
+## 10. Development Tools and AI Assistance
+
+The following tools were used during development:
+
+- **Visual Studio Code:** Code editing and project development.
+- **Git and GitHub:** Source-code management and version control.
+- **Expo and EAS:** Application development, testing, and Android builds.
+- **OpenAI ChatGPT:** Assisted with code explanations, debugging, implementation guidance, and documentation preparation.
+
+AI assistance was used as a development aid. The application was tested by the developer.
+
+## 11. Repository
+
+GitHub Repository:
+
+https://github.com/maryambatool4497-a11y/VanishClassNetwork
+
+---
+
+**Project:** Vanish Class Network  
+**Platform:** Android  
+**Development Framework:** React Native with Expo  
+**Protocol:** WebSocket Protocol Version 1
