@@ -12,7 +12,7 @@ The application provides a temporary messaging environment for classroom communi
 
 - **Real-Time Messaging:** Send and receive messages through a WebSocket connection.
 - **30-Second Message Expiry:** Messages automatically expire after their original 30-second lifetime.
-- **Message Status:** Supports message lifecycle states such as created, waiting, sent, delivered, displayed, expired, and dropped.
+- **Message Status:** Tracks message states such as waiting, sent, and expired.
 - **Offline Message Queue:** Temporarily queues messages while offline and sends them only if their original expiry deadline has not passed.
 - **Presence System:** Displays the number and names of currently connected members.
 - **Automatic Reconnection:** Attempts to reconnect when the connection is interrupted.
