@@ -32,7 +32,6 @@ const PROTOCOL_VERSION = 1;
 
 export default function HomeScreen() {
   const [deviceId, setDeviceId] = useState("");
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageQueue, setMessageQueue] = useState<Message[]>([]);
   const [relayStatus, setRelayStatus] = useState("Disconnected");
@@ -133,29 +132,17 @@ export default function HomeScreen() {
       try {
         const data = JSON.parse(event.data);
 
-        // Relay successfully accepted our connection
         if (data.type === "welcome" && typeof data.server_time === "number") {
           reconnectAttemptRef.current = 0;
-
           serverTimeOffsetRef.current = data.server_time - Date.now();
-
           setRelayStatus("Connected");
           console.log("Joined relay successfully!");
-        }
-
-        // Relay error
-        else if (data.type === "error") {
+        } else if (data.type === "error") {
           setRelayStatus("Relay error");
           console.log("Relay error:", data);
-        }
-
-        // Heartbeat response
-        else if (data.type === "pong") {
+        } else if (data.type === "pong") {
           lastPongAtRef.current = Date.now();
-          console.log("Relay heartbeat received");
-        }
-        // Presence update from relay
-        else if (
+        } else if (
           data.type === "presence" &&
           typeof data.count === "number" &&
           Array.isArray(data.members) &&
@@ -163,30 +150,16 @@ export default function HomeScreen() {
         ) {
           setMemberCount(data.count);
           setConnectedMembers(data.members);
-
           console.log("Connected members:", data.members);
-        }
-
-        // Message acknowledgement
-        else if (data.type === "delivered" && typeof data.id === "string") {
+        } else if (data.type === "delivered" && typeof data.id === "string") {
           pendingMessageIdsRef.current.delete(data.id);
-
-          console.log(
-            "Relay acknowledged message:",
-            data.id,
-            "Recipients:",
-            data.count,
-          );
 
           setMessages((previousMessages) =>
             previousMessages.map((message) =>
               message.id === data.id ? { ...message, status: "sent" } : message,
             ),
           );
-        }
-
-        // Incoming messages from the relay
-        else if (
+        } else if (
           data.type === "message" &&
           typeof data.id === "string" &&
           typeof data.text === "string" &&
@@ -194,22 +167,14 @@ export default function HomeScreen() {
           typeof data.expires_at === "number" &&
           typeof data.sent_at === "number"
         ) {
-          // Ignore duplicate messages
-          if (seenMessageIdsRef.current.has(data.id)) {
-            return;
-          }
+          if (seenMessageIdsRef.current.has(data.id)) return;
 
           seenMessageIdsRef.current.add(data.id);
 
-          // Convert relay time into this phone's clock
           const localExpiry = data.expires_at - serverTimeOffsetRef.current;
-
           const localSentTime = data.sent_at - serverTimeOffsetRef.current;
 
-          // Never display an already expired message
-          if (localExpiry <= Date.now()) {
-            return;
-          }
+          if (localExpiry <= Date.now()) return;
 
           const incomingMessage: Message = {
             id: data.id,
@@ -222,7 +187,6 @@ export default function HomeScreen() {
           };
 
           setMessages((previousMessages) => {
-            // Additional duplicate protection
             if (
               previousMessages.some(
                 (message) => message.id === incomingMessage.id,
@@ -235,10 +199,7 @@ export default function HomeScreen() {
           });
 
           console.log("Received message:", data.id);
-        }
-
-        // Relay says a message has expired
-        else if (data.type === "expired" && typeof data.id === "string") {
+        } else if (data.type === "expired" && typeof data.id === "string") {
           pendingMessageIdsRef.current.delete(data.id);
 
           setMessages((previousMessages) =>
@@ -248,8 +209,6 @@ export default function HomeScreen() {
           setMessageQueue((previousQueue) =>
             previousQueue.filter((message) => message.id !== data.id),
           );
-
-          console.log("Message expired:", data.id);
         }
       } catch (error) {
         console.log("Invalid relay response:", error);
@@ -257,9 +216,7 @@ export default function HomeScreen() {
     };
 
     socket.onerror = () => {
-      if (active) {
-        setRelayStatus("Connection error");
-      }
+      if (active) setRelayStatus("Connection error");
     };
 
     socket.onclose = () => {
@@ -276,12 +233,10 @@ export default function HomeScreen() {
       if (active) {
         setConnectedMembers([]);
         setMemberCount(0);
-
         setRelayStatus("Disconnected");
 
         if (isOnline) {
           const delay = Math.min(1000 * 2 ** reconnectAttemptRef.current, 8000);
-
           reconnectAttemptRef.current += 1;
 
           reconnectTimerRef.current = setTimeout(() => {
@@ -337,7 +292,6 @@ export default function HomeScreen() {
 
         if (savedMessages !== null) {
           const parsedMessages: Message[] = JSON.parse(savedMessages);
-
           const currentTime = Date.now();
 
           const validMessages = parsedMessages.filter(
@@ -345,12 +299,10 @@ export default function HomeScreen() {
           );
 
           setMessages(validMessages);
-
           setMessageQueue(
             validMessages.filter((message) => message.status === "waiting"),
           );
 
-          // Restore IDs to prevent duplicate display
           validMessages.forEach((message) => {
             seenMessageIdsRef.current.add(message.id);
           });
@@ -380,13 +332,12 @@ export default function HomeScreen() {
     saveMessages();
   }, [messages, isLoaded]);
 
-  // Update timer and remove expired messages
+  // Update countdown and remove expired messages
   useEffect(() => {
     if (!isLoaded) return;
 
     const updateMessages = () => {
       const currentTime = Date.now();
-
       setNow(currentTime);
 
       setMessages((previousMessages) =>
@@ -401,9 +352,7 @@ export default function HomeScreen() {
     const timer = setInterval(updateMessages, 250);
 
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        updateMessages();
-      }
+      if (state === "active") updateMessages();
     });
 
     return () => {
@@ -412,20 +361,16 @@ export default function HomeScreen() {
     };
   }, [isLoaded]);
 
+  // Send queued messages when connected
   useEffect(() => {
-    if (!isLoaded || !isOnline || relayStatus !== "Connected") {
-      return;
-    }
+    if (!isLoaded || !isOnline || relayStatus !== "Connected") return;
 
     const socket = socketRef.current;
 
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      return;
-    }
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
     const currentTime = Date.now();
 
-    // Remove expired messages only if there are any
     const hasExpiredMessages = messageQueue.some(
       (message) => message.expiresAt <= currentTime,
     );
@@ -436,19 +381,13 @@ export default function HomeScreen() {
       );
     }
 
-    // Send only valid messages
     const validMessages = messageQueue.filter(
       (message) => message.expiresAt > currentTime,
     );
 
     validMessages.forEach((message) => {
-      if (pendingMessageIdsRef.current.has(message.id)) {
-        return;
-      }
-
-      if (message.expiresAt <= Date.now()) {
-        return;
-      }
+      if (pendingMessageIdsRef.current.has(message.id)) return;
+      if (message.expiresAt <= Date.now()) return;
 
       try {
         pendingMessageIdsRef.current.add(message.id);
@@ -498,24 +437,14 @@ export default function HomeScreen() {
     };
 
     seenMessageIdsRef.current.add(newMessage.id);
-
     setMessages((previousMessages) => [...previousMessages, newMessage]);
-
     setMessageQueue((previousQueue) => [...previousQueue, newMessage]);
-
     setInput("");
   };
 
-  // Get readable message status
   const getMessageStatus = (message: Message) => {
-    if (message.status === "waiting") {
-      return "Waiting for server...";
-    }
-
-    if (message.isMine === false) {
-      return "Received";
-    }
-
+    if (message.status === "waiting") return "Waiting for server...";
+    if (message.isMine === false) return "Received";
     return "Sent";
   };
 
@@ -525,6 +454,7 @@ export default function HomeScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <StatusBar barStyle="dark-content" />
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -534,7 +464,6 @@ export default function HomeScreen() {
 
           <View style={styles.titleArea}>
             <Text style={styles.headerTitle}>Vanish Class</Text>
-
             <Text style={styles.headerSubtitle}>
               little chats, lasting moments ♡
             </Text>
@@ -544,12 +473,9 @@ export default function HomeScreen() {
             <View
               style={[
                 styles.statusDot,
-                {
-                  backgroundColor: isOnline ? "#79B995" : "#E58B9B",
-                },
+                { backgroundColor: isOnline ? "#168F83" : "#D97777" },
               ]}
             />
-
             <Text style={styles.statusText}>
               {isOnline ? "ONLINE" : "OFFLINE"}
             </Text>
@@ -560,15 +486,20 @@ export default function HomeScreen() {
           <Text style={styles.noticeText}>
             ✨ Every message has a 30-second lifetime
           </Text>
-
           <Text style={styles.relayText}>Relay: {relayStatus}</Text>
         </View>
+
         <View style={styles.presenceContainer}>
-          <Text style={styles.presenceTitle}>Connected: {memberCount}</Text>
+          <View style={styles.presenceTop}>
+            <Text style={styles.presenceTitle}>Connected members</Text>
+            <View style={styles.memberCountBadge}>
+              <Text style={styles.memberCountText}>{memberCount}</Text>
+            </View>
+          </View>
 
           <Text style={styles.presenceNames}>
             {connectedMembers.length > 0
-              ? connectedMembers.join(", ")
+              ? connectedMembers.join("  •  ")
               : "No members connected"}
           </Text>
         </View>
@@ -581,19 +512,19 @@ export default function HomeScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messageList}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
-              <Text style={styles.emptyIcon}>💌</Text>
+              <Text style={styles.emptyIcon}>💬</Text>
             </View>
 
-            <Text style={styles.emptyTitle}>A little quiet here...</Text>
-
+            <Text style={styles.emptyTitle}>Your chat starts here</Text>
             <Text style={styles.emptySubtitle}>
-              Send your first message and{"\n"}
-              let the conversation begin! 🌷
+              Send a message and start a conversation{"\n"}
+              with your classmates.
             </Text>
-
             <Text style={styles.emptyDecoration}>─── ♡ ───</Text>
           </View>
         }
@@ -617,8 +548,13 @@ export default function HomeScreen() {
                 !isMine && styles.receivedMessageWrapper,
               ]}
             >
-              <Text style={styles.senderLabel}>
-                {isMine ? "YOU ♡" : `${item.sender || "CLASSMATE"} ♡`}
+              <Text
+                style={[
+                  styles.senderLabel,
+                  !isMine && styles.receivedSenderLabel,
+                ]}
+              >
+                {isMine ? "YOU" : item.sender || "CLASSMATE"}
               </Text>
 
               <View
@@ -628,14 +564,12 @@ export default function HomeScreen() {
                 ]}
               >
                 <Text style={styles.messageText}>{item.text}</Text>
-
                 <Text style={styles.messageStatus}>
                   {getMessageStatus(item)}
                 </Text>
 
                 <View style={styles.messageFooter}>
                   <Text style={styles.timeText}>{messageTime}</Text>
-
                   <View style={styles.expiryBadge}>
                     <Text style={styles.expiryText}>◷ {secondsLeft}s</Text>
                   </View>
@@ -648,17 +582,20 @@ export default function HomeScreen() {
 
       {/* Message input */}
       <View style={styles.inputSection}>
-        <Text style={styles.inputHint}>SHARE A LITTLE SOMETHING ♡</Text>
+        <Text style={styles.inputHint}>SEND A MESSAGE</Text>
 
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
-            placeholder="Type something sweet..."
-            placeholderTextColor="#A59AAF"
+            placeholder="Write your message..."
+            placeholderTextColor="#8CA6A2"
             value={input}
             onChangeText={setInput}
             multiline
             maxLength={500}
+            textAlignVertical="center"
+            blurOnSubmit={false}
+            returnKeyType="default"
           />
 
           <TouchableOpacity
@@ -668,13 +605,14 @@ export default function HomeScreen() {
             ]}
             onPress={sendMessage}
             activeOpacity={0.8}
+            disabled={input.trim() === ""}
           >
             <Text style={styles.sendIcon}>➤</Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.bottomText}>
-          made for little class conversations ✿
+          Vanish Class • little conversations, short-lived messages
         </Text>
       </View>
     </KeyboardAvoidingView>
@@ -684,16 +622,16 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FBF8FF",
+    backgroundColor: "#F5FAF9",
   },
 
   header: {
-    backgroundColor: "#F0E7FF",
-    paddingTop: 55,
+    backgroundColor: "#DDF3EF",
+    paddingTop: Platform.OS === "android" ? 42 : 55,
     paddingHorizontal: 20,
     paddingBottom: 18,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
 
   headerTop: {
@@ -704,7 +642,7 @@ const styles = StyleSheet.create({
   logoCircle: {
     height: 50,
     width: 50,
-    borderRadius: 18,
+    borderRadius: 17,
     backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
@@ -712,7 +650,7 @@ const styles = StyleSheet.create({
 
   logo: {
     fontSize: 29,
-    color: "#9B75C9",
+    color: "#168F83",
   },
 
   titleArea: {
@@ -723,12 +661,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 23,
     fontWeight: "bold",
-    color: "#55416D",
+    color: "#174F49",
   },
 
   headerSubtitle: {
     fontSize: 12,
-    color: "#8B76A0",
+    color: "#56847D",
     marginTop: 3,
   },
 
@@ -750,12 +688,12 @@ const styles = StyleSheet.create({
 
   statusText: {
     fontSize: 10,
-    color: "#82639F",
+    color: "#276E65",
     fontWeight: "bold",
   },
 
   notice: {
-    backgroundColor: "#FAF5FF",
+    backgroundColor: "#F5FCFA",
     marginTop: 17,
     padding: 11,
     borderRadius: 13,
@@ -763,15 +701,58 @@ const styles = StyleSheet.create({
   },
 
   noticeText: {
-    color: "#80669A",
+    color: "#34786F",
     fontSize: 12,
     fontWeight: "600",
   },
 
   relayText: {
-    color: "#80669A",
+    color: "#6A918B",
     fontSize: 10,
     marginTop: 5,
+  },
+
+  presenceContainer: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#D4EAE5",
+  },
+
+  presenceTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  presenceTitle: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#245F57",
+  },
+
+  memberCountBadge: {
+    minWidth: 26,
+    height: 26,
+    paddingHorizontal: 7,
+    borderRadius: 13,
+    backgroundColor: "#168F83",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  memberCountText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+
+  presenceNames: {
+    fontSize: 12,
+    color: "#648A84",
+    marginTop: 7,
   },
 
   chatArea: {
@@ -792,35 +773,35 @@ const styles = StyleSheet.create({
   },
 
   emptyIconCircle: {
-    height: 100,
-    width: 100,
-    borderRadius: 35,
-    backgroundColor: "#F0E7FF",
+    height: 96,
+    width: 96,
+    borderRadius: 32,
+    backgroundColor: "#DDF3EF",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 20,
   },
 
   emptyIcon: {
-    fontSize: 46,
+    fontSize: 43,
   },
 
   emptyTitle: {
     fontSize: 21,
     fontWeight: "bold",
-    color: "#614D78",
+    color: "#245F57",
   },
 
   emptySubtitle: {
     textAlign: "center",
-    color: "#A090B1",
-    fontSize: 14,
-    lineHeight: 23,
+    color: "#789A94",
+    fontSize: 13,
+    lineHeight: 22,
     marginTop: 10,
   },
 
   emptyDecoration: {
-    color: "#C4A9DE",
+    color: "#83B9AE",
     marginTop: 22,
     fontSize: 16,
   },
@@ -836,7 +817,7 @@ const styles = StyleSheet.create({
   },
 
   senderLabel: {
-    color: "#9B7BB8",
+    color: "#168F83",
     fontSize: 10,
     fontWeight: "bold",
     marginBottom: 6,
@@ -845,32 +826,40 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
+  receivedSenderLabel: {
+    textAlign: "left",
+    color: "#6A9B90",
+    marginLeft: 5,
+  },
+
   messageBubble: {
-    backgroundColor: "#EEE3FA",
-    borderRadius: 20,
+    backgroundColor: "#DDF3EF",
+    borderRadius: 19,
     borderBottomRightRadius: 5,
     padding: 14,
     elevation: 2,
-    shadowColor: "#C7B4D9",
-    shadowOpacity: 0.15,
+    shadowColor: "#7FAFA5",
+    shadowOpacity: 0.13,
     shadowRadius: 5,
   },
 
   receivedMessageBubble: {
-    backgroundColor: "#E4F3EA",
-    borderBottomRightRadius: 20,
+    backgroundColor: "#FFFFFF",
+    borderBottomRightRadius: 19,
     borderBottomLeftRadius: 5,
+    borderWidth: 1,
+    borderColor: "#DCEDE9",
   },
 
   messageText: {
-    color: "#51405F",
+    color: "#285B54",
     fontSize: 15,
     lineHeight: 22,
   },
 
   messageStatus: {
     fontSize: 10,
-    color: "#8B789E",
+    color: "#73958E",
     marginTop: 5,
     fontStyle: "italic",
   },
@@ -884,18 +873,18 @@ const styles = StyleSheet.create({
 
   timeText: {
     fontSize: 10,
-    color: "#9985AA",
+    color: "#82A29C",
   },
 
   expiryBadge: {
-    backgroundColor: "#F9DCE8",
+    backgroundColor: "#FCE9E6",
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 12,
   },
 
   expiryText: {
-    color: "#B65E83",
+    color: "#B96E62",
     fontSize: 10,
     fontWeight: "bold",
   },
@@ -904,15 +893,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 17,
     paddingTop: 13,
-    paddingBottom: 18,
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
+    paddingBottom: Platform.OS === "android" ? 12 : 18,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     elevation: 8,
+    shadowColor: "#568B81",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
   },
 
   inputHint: {
     fontSize: 10,
-    color: "#A28CB7",
+    color: "#568B81",
     fontWeight: "bold",
     letterSpacing: 1,
     marginBottom: 9,
@@ -922,34 +914,35 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8F3FC",
+    backgroundColor: "#F3F9F7",
     borderRadius: 25,
     paddingHorizontal: 13,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: "#EDE3F5",
+    borderColor: "#D9EAE6",
   },
 
   textInput: {
     flex: 1,
-    color: "#51405F",
+    color: "#285B54",
     fontSize: 14,
     paddingVertical: 10,
     maxHeight: 85,
+    minHeight: 42,
   },
 
   sendButton: {
     height: 42,
     width: 42,
     borderRadius: 16,
-    backgroundColor: "#DCCCEB",
+    backgroundColor: "#B9DCD5",
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 8,
   },
 
   activeSendButton: {
-    backgroundColor: "#A77ACB",
+    backgroundColor: "#168F83",
   },
 
   sendIcon: {
@@ -960,26 +953,8 @@ const styles = StyleSheet.create({
 
   bottomText: {
     textAlign: "center",
-    color: "#B6A7C3",
+    color: "#91AAA5",
     fontSize: 10,
     marginTop: 12,
-  },
-  presenceContainer: {
-    marginTop: 10,
-    padding: 10,
-    backgroundColor: "#F0E8FA",
-    borderRadius: 12,
-  },
-
-  presenceTitle: {
-    fontSize: 13,
-    fontWeight: "bold",
-    color: "#76528F",
-  },
-
-  presenceNames: {
-    fontSize: 12,
-    color: "#6D6475",
-    marginTop: 4,
   },
 });
