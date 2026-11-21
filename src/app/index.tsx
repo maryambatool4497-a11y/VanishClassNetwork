@@ -37,6 +37,8 @@ export default function HomeScreen() {
   const [messageQueue, setMessageQueue] = useState<Message[]>([]);
   const [relayStatus, setRelayStatus] = useState("Disconnected");
   const [reconnectKey, setReconnectKey] = useState(0);
+  const [connectedMembers, setConnectedMembers] = useState<string[]>([]);
+  const [memberCount, setMemberCount] = useState(0);
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -83,6 +85,8 @@ export default function HomeScreen() {
     if (!deviceId) return;
 
     if (!isOnline) {
+      setConnectedMembers([]);
+      setMemberCount(0);
       setRelayStatus("Offline");
       return;
     }
@@ -149,6 +153,18 @@ export default function HomeScreen() {
         else if (data.type === "pong") {
           lastPongAtRef.current = Date.now();
           console.log("Relay heartbeat received");
+        }
+        // Presence update from relay
+        else if (
+          data.type === "presence" &&
+          typeof data.count === "number" &&
+          Array.isArray(data.members) &&
+          data.members.every((member: unknown) => typeof member === "string")
+        ) {
+          setMemberCount(data.count);
+          setConnectedMembers(data.members);
+
+          console.log("Connected members:", data.members);
         }
 
         // Message acknowledgement
@@ -258,6 +274,9 @@ export default function HomeScreen() {
       }
 
       if (active) {
+        setConnectedMembers([]);
+        setMemberCount(0);
+
         setRelayStatus("Disconnected");
 
         if (isOnline) {
@@ -505,8 +524,7 @@ export default function HomeScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <StatusBar backgroundColor="#F7F0FF" barStyle="dark-content" />
-
+      <StatusBar barStyle="dark-content" />
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -544,6 +562,15 @@ export default function HomeScreen() {
           </Text>
 
           <Text style={styles.relayText}>Relay: {relayStatus}</Text>
+        </View>
+        <View style={styles.presenceContainer}>
+          <Text style={styles.presenceTitle}>Connected: {memberCount}</Text>
+
+          <Text style={styles.presenceNames}>
+            {connectedMembers.length > 0
+              ? connectedMembers.join(", ")
+              : "No members connected"}
+          </Text>
         </View>
       </View>
 
@@ -936,5 +963,23 @@ const styles = StyleSheet.create({
     color: "#B6A7C3",
     fontSize: 10,
     marginTop: 12,
+  },
+  presenceContainer: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: "#F0E8FA",
+    borderRadius: 12,
+  },
+
+  presenceTitle: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#76528F",
+  },
+
+  presenceNames: {
+    fontSize: 12,
+    color: "#6D6475",
+    marginTop: 4,
   },
 });
